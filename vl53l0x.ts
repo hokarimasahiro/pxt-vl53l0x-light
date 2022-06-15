@@ -1,6 +1,6 @@
 //% color=65 weight=80
 //% icon="\uf018"
-namespace Rangefinder {
+namespace vl53l0x {
     let i2cAddr = 0x29
     let IO_TIMEOUT = 1000
     let SYSRANGE_START = 0x00
@@ -354,7 +354,7 @@ namespace Rangefinder {
                 timeout++
                 basic.pause(1)
                 if (timeout == IO_TIMEOUT)
-                    return 0
+                    return -1
             }
         }
 
@@ -363,7 +363,7 @@ namespace Rangefinder {
             timeout++
             basic.pause(1)
             if (timeout == IO_TIMEOUT)
-                return 0
+                return -2
         }
 
         let value = readReg16(RESULT_RANGE_STATUS + 10)
