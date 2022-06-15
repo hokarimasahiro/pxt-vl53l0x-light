@@ -19,7 +19,8 @@ namespace vl53l0x {
     let RESULT_RANGE_STATUS = 0x14
     let OSC_CALIBRATE = 0xf8
     let MEASURE_PERIOD = 0x04
-
+    let MODEL_ID = 0xC0;
+    let REVISION_ID = 0xC2;
     let started = false
     let stop_variable = 0
     let spad_count = 0
@@ -40,6 +41,25 @@ namespace vl53l0x {
 
     function writeReg(raddr: number, d: number): void {
         pins.i2cWriteNumber(i2cAddr, ((raddr << 8) + d), NumberFormat.UInt16BE, false)
+    }
+
+    function readBuf(raddr: number, size: number): number[] {
+        let retbuf: number[] = [];
+
+        pins.i2cWriteNumber(i2cAddr, raddr >> 0, NumberFormat.UInt8BE);
+        let buf = pins.i2cReadBuffer(i2cAddr, size >> 0);
+        for (let i = 0; i < size; i++) {
+            retbuf.push(buf[i]);
+        }
+        return retbuf;
+    }
+    function writeBuf(raddr: number, dat: number[]): void {
+        let buf = pins.createBuffer(dat.length + 1);
+        buf[0] = raddr >> 0;
+        for (let i = 0; i < dat.length; i++) {
+            buf[i + 1] = dat[i] >> 0;
+        }
+        pins.i2cWriteBuffer(i2cAddr, buf)
     }
 
     function writeReg16(raddr: number, d: number): void {
@@ -68,14 +88,13 @@ namespace vl53l0x {
     **/
     //% block="initialise"
     //% blockId=ranger_init
-    export function initialise(): void {
+    export function initialise() {
         let r1 = readReg(0xc0)
         let r2 = readReg(0xc1)
         let r3 = readReg(0xc2)
 
-        if (r1 != 0xEE || r2 != 0xAA || r3 != 0x10) {
-            return
-        }
+        if (readReg(MODEL_ID) != 0xEE) return -1;
+
         let power2v8 = true
         writeFlag(EXTSUP_HV, 0, power2v8)
 
@@ -97,18 +116,9 @@ namespace vl53l0x {
         writeReg(SYSTEM_SEQUENCE, 0xff)
 
         if (!spad_info())
-            return
+            return -2;
 
-        pins.i2cWriteNumber(i2cAddr, SPAD_ENABLES, NumberFormat.UInt8BE, false)
-        let sp1 = pins.i2cReadNumber(i2cAddr, NumberFormat.UInt16BE, false)
-        let sp2 = pins.i2cReadNumber(i2cAddr, NumberFormat.UInt16BE, false)
-        let sp3 = pins.i2cReadNumber(i2cAddr, NumberFormat.UInt16BE, false)
-        spad_map[0] = (sp1 >> 8) & 0xFF
-        spad_map[1] = sp1 & 0xFF
-        spad_map[2] = (sp2 >> 8) & 0xFF
-        spad_map[3] = sp2 & 0xFF
-        spad_map[4] = (sp3 >> 8) & 0xFF
-        spad_map[5] = sp3 & 0xFF
+        spad_map = readBuf(SPAD_ENABLES,6);
 
         // set reference spads
         writeReg(0xff, 0x01)
@@ -125,6 +135,7 @@ namespace vl53l0x {
                 spads_enabled += 1
             }
         }
+        writeBuf(SPAD_ENABLES, spad_map)
 
         writeReg(0xff, 0x01)
         writeReg(0x00, 0x00)
@@ -226,13 +237,13 @@ namespace vl53l0x {
 
         writeReg(SYSTEM_SEQUENCE, 0x01)
         if (!calibrate(0x40))
-            return
+            return -3;
         writeReg(SYSTEM_SEQUENCE, 0x02)
         if (!calibrate(0x00))
-            return
+            return -4;
         writeReg(SYSTEM_SEQUENCE, 0xe8)
 
-        return
+        return 0;
     }
 
     function spad_info(): boolean {
